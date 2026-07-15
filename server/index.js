@@ -11,8 +11,23 @@ const ragModel = process.env.RAG_CHAT_MODEL || 'gemma3:1b'
 const goodsAccount = String(process.env.GOODS_ACCOUNT || '1561').trim()
 const goodsPriceList = String(process.env.GOODS_PRICE_LIST || 'BGC').trim()
 const syncPromises = new Map()
+const allowedOrigins = String(process.env.CHAT_ALLOWED_ORIGINS || 'http://localhost:4200,https://bh.asianasa.com')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean)
 
 app.disable('x-powered-by')
+app.use((request, response, next) => {
+  const origin = request.headers.origin
+  if (origin && allowedOrigins.includes(origin)) {
+    response.set('Access-Control-Allow-Origin', origin)
+    response.set('Vary', 'Origin')
+  }
+  response.set('Access-Control-Allow-Headers', 'Content-Type')
+  response.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  if (request.method === 'OPTIONS') return response.sendStatus(204)
+  next()
+})
 app.use(express.json({ limit: '1mb' }))
 app.use('/api', (_request, response, next) => {
   response.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
