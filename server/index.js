@@ -3,6 +3,7 @@ import express from 'express'
 import sql from 'mssql'
 import { closePool, getPool, validateDatabaseName } from './db.js'
 import { listGoods, qdrantHealth, searchGoods, syncGoodsToQdrant } from './qdrant.js'
+import webProductChatRouter from './web-product-chat.js'
 
 const app = express()
 const port = Number(process.env.DB_PORT) || 3001
@@ -19,6 +20,7 @@ app.use('/api', (_request, response, next) => {
   response.set('Expires', '0')
   next()
 })
+app.use('/api/web-product-chat', webProductChatRouter)
 
 function selectedGoodsRequest(pool) {
   return pool.request()

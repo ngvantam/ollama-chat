@@ -3,6 +3,7 @@ import { validateDatabaseName } from './db.js'
 
 const embeddingModel = process.env.QDRANT_EMBEDDING_MODEL || 'sentence-transformers/all-MiniLM-L6-v2'
 const vectorSize = Number.parseInt(process.env.QDRANT_VECTOR_SIZE || '384', 10)
+const collectionSyncTasks = new Map()
 
 function getClient() {
   const url = process.env.QDRANT_URL?.trim()
@@ -43,26 +44,39 @@ function productDocument(payload) {
 }
 
 export async function syncGoodsToQdrant(database, rows) {
-  const client = getClient()
   const collection = getGoodsCollection(database)
-  const exists = await client.collectionExists(collection)
-  if (exists.exists) await client.deleteCollection(collection)
-  await client.createCollection(collection, {
-    vectors: { size: vectorSize, distance: 'Cosine' },
-  })
-
-  const points = rows.map(row => {
-    const payload = cleanPayload(row, database)
-    return {
-      id: Number(row.Id),
-      vector: { text: productDocument(payload), model: embeddingModel },
-      payload,
-    }
-  })
-  for (let index = 0; index < points.length; index += 32) {
-    await client.upsert(collection, { wait: true, points: points.slice(index, index + 32) })
+  if (collectionSyncTasks.has(collection)) {
+    throw new Error(`Collection ${collection} đang được đồng bộ`)
   }
-  return { collection, rows: points.length, embeddingModel }
+
+  const syncTask = (async () => {
+    const client = getClient()
+    const exists = await client.collectionExists(collection)
+    if (exists.exists) await client.deleteCollection(collection)
+    await client.createCollection(collection, {
+      vectors: { size: vectorSize, distance: 'Cosine' },
+    })
+
+    const points = rows.map(row => {
+      const payload = cleanPayload(row, database)
+      return {
+        id: Number(row.Id),
+        vector: { text: productDocument(payload), model: embeddingModel },
+        payload,
+      }
+    })
+    for (let index = 0; index < points.length; index += 32) {
+      await client.upsert(collection, { wait: true, points: points.slice(index, index + 32) })
+    }
+    return { collection, rows: points.length, embeddingModel }
+  })()
+
+  collectionSyncTasks.set(collection, syncTask)
+  try {
+    return await syncTask
+  } finally {
+    collectionSyncTasks.delete(collection)
+  }
 }
 
 export async function searchGoods(database, query, limit = 5) {
@@ -95,5 +109,16 @@ export async function qdrantHealth(database) {
   const client = getClient()
   const collection = getGoodsCollection(database)
   const exists = await client.collectionExists(collection)
-  return { connected: true, collection, exists: exists.exists, embeddingModel }
+  if (!exists.exists) {
+    return { connected: true, ready: false, collection, exists: false, pointsCount: 0, embeddingModel }
+  }
+  const collectionInfo = await client.getCollection(collection)
+  return {
+    connected: true,
+    ready: true,
+    collection,
+    exists: true,
+    pointsCount: Number(collectionInfo.points_count || 0),
+    embeddingModel,
+  }
 }

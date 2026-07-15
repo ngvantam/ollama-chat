@@ -22,6 +22,7 @@ RAG_CHAT_MODEL=gemma3:1b
 RAG_TOP_K=5
 GOODS_ACCOUNT=1561
 GOODS_PRICE_LIST=BGC
+PRODUCT_CHAT_DATABASES=isoft.asianasa.com,bh0288,test.asianasa.com
 ```
 
 Không commit `.env` hoặc đặt API key trong README/source code. Bật Inference trong
@@ -56,6 +57,24 @@ bị xóa (`IsDeleted = 0` hoặc `NULL`).
 - `GET /api/db/health`
 - `GET /api/db/goods?page=1&pageSize=25`
 
+## API riêng cho WEBONEPAGE
+
+WEBONEPAGE lấy database từ `environment.dbName` và gửi database đó trong mọi
+request. Mỗi database dùng một collection Qdrant riêng, ví dụ
+`goods_isoft_asianasa_com` hoặc `goods_bh0288`.
+
+- `GET /api/web-product-chat/status?database=...` — kiểm tra collection và số sản phẩm.
+- `POST /api/web-product-chat/sync` — đọc lại Goods rồi thay dữ liệu collection của database.
+- `POST /api/web-product-chat/chat` — chat theo đúng collection của database gửi lên.
+
+`PRODUCT_CHAT_DATABASES` là danh sách database được phép sử dụng chatbot, phân
+cách bằng dấu phẩy. Để trống trong môi trường development nếu chưa cần giới hạn.
+Production nên khai báo rõ danh sách database và đặt API sau reverse proxy nội bộ.
+
+Angular development proxy chuyển `/rag-api` sang `http://localhost:3001/api`.
+Khi deploy WEBONEPAGE, web server cũng cần cấu hình reverse proxy cùng đường dẫn
+hoặc thay bằng URL backend chatbot phù hợp.
+
 Qdrant chỉ tạo embedding và truy xuất sản phẩm liên quan; `RAG_CHAT_MODEL` chịu
 trách nhiệm viết câu trả lời cuối cùng. Có thể đổi model này mà không cần đồng bộ
 lại Qdrant.
@@ -63,3 +82,10 @@ lại Qdrant.
 
 netstat -ano | findstr :3001
 taskkill /PID 10212 /F
+
+npm install --legacy-peer-deps
+npm.cmd start
+npm.cmd run build
+D:\A.Hung_Cong\resource\WEBONEPAGE>.\node_modules\.bin\ng.cmd serve
+ 
+ollama pull gemma3:1b
